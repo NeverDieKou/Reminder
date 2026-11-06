@@ -131,7 +131,7 @@ function itemHtml(t, archived = false) {
 function renderActive() {
   const el = $('#view-active');
   if (!state.active.length) {
-    el.innerHTML = `<div class="empty"><b>Yapılacak iş yok</b>Yukarıya yazarak ya da “Hey Siri, iş ekle” diyerek yeni iş ekleyebilirsin.</div>`;
+    el.innerHTML = `<div class="empty"><b>Yapılacak iş yok</b>Yukarıya yazarak ya da “Hey Siri, İşlerime ekle” diyerek yeni iş ekleyebilirsin.</div>`;
     return;
   }
   const sort = (a, b) => (a.remind_at ?? Infinity) - (b.remind_at ?? Infinity) || a.created_at - b.created_at;
