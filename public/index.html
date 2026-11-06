@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>İşlerim</title>
+  <meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#16171a" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="İşlerim">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/icon-180.png">
+  <link rel="icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <!-- Giriş -->
+  <section id="auth" class="auth" hidden>
+    <div class="auth-card">
+      <img src="/icons/icon-192.png" alt="" width="64" height="64">
+      <h1>İşlerim</h1>
+      <p id="auth-hint">Sana özel hatırlatıcı.</p>
+      <form id="auth-form">
+        <input id="auth-pass" type="password" autocomplete="current-password" placeholder="Şifre" required minlength="4">
+        <button class="btn primary" type="submit" id="auth-btn">Giriş</button>
+        <p class="error" id="auth-error"></p>
+      </form>
+    </div>
+  </section>
+
+  <!-- Uygulama -->
+  <main id="app" hidden>
+    <header class="top">
+      <h1 id="page-title">İşlerim</h1>
+      <button class="icon-btn" id="open-settings" aria-label="Ayarlar">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </header>
+
+    <div id="banner" class="banner" hidden></div>
+
+    <form id="quick" class="quick" autocomplete="off">
+      <div class="quick-row">
+        <input id="quick-input" type="text" enterkeyhint="done" placeholder="Yeni iş: “yarın 10’da bankayı ara, önemli”">
+        <button type="button" class="icon-btn" id="mic" aria-label="Sesle ekle" hidden>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+        </button>
+        <button type="submit" class="btn primary add-btn" aria-label="Ekle">Ekle</button>
+      </div>
+      <div class="preview" id="preview"></div>
+    </form>
+
+    <div id="view-active" class="view"></div>
+    <div id="view-archive" class="view" hidden></div>
+    <div id="view-stats" class="view" hidden></div>
+
+    <nav class="tabs">
+      <button data-tab="active" class="on">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/></svg>
+        <span>İşler</span>
+      </button>
+      <button data-tab="archive">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/></svg>
+        <span>Arşiv</span>
+      </button>
+      <button data-tab="stats">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+        <span>Analiz</span>
+      </button>
+    </nav>
+  </main>
+
+  <!-- Düzenleme -->
+  <dialog id="edit" class="sheet">
+    <form id="edit-form" method="dialog">
+      <div class="sheet-head">
+        <button type="button" class="link" data-close>Vazgeç</button>
+        <strong id="edit-heading">İş</strong>
+        <button type="submit" class="link strong" value="save">Kaydet</button>
+      </div>
+      <label class="field"><span>Başlık</span><input name="title" type="text" required></label>
+      <label class="field"><span>Not</span><textarea name="notes" rows="2" placeholder="İsteğe bağlı"></textarea></label>
+
+      <div class="field"><span>Önem</span>
+        <div class="seg" id="seg-priority">
+          <button type="button" data-p="0">Yok</button>
+          <button type="button" data-p="1" class="p1">Düşük</button>
+          <button type="button" data-p="2" class="p2">Orta</button>
+          <button type="button" data-p="3" class="p3">Yüksek</button>
+        </div>
+      </div>
+
+      <div class="field"><span>Hatırlat</span>
+        <input name="when" type="datetime-local">
+        <div class="chips">
+          <button type="button" data-when="1h">1 saat sonra</button>
+          <button type="button" data-when="eve">Bu akşam 19:00</button>
+          <button type="button" data-when="tom">Yarın 09:00</button>
+          <button type="button" data-when="none">Kaldır</button>
+        </div>
+      </div>
+
+      <label class="field"><span>Tekrar</span>
+        <select name="repeat">
+          <option value="">Tekrar yok</option>
+          <option value="daily">Her gün</option>
+          <option value="weekdays">Hafta içi her gün</option>
+          <option value="weekly">Her hafta</option>
+          <option value="monthly">Her ay</option>
+        </select>
+      </label>
+
+      <div class="sheet-actions" id="edit-actions">
+        <button type="button" class="btn" id="edit-done">Tamamlandı</button>
+        <button type="button" class="btn danger" id="edit-delete">Sil</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Ayarlar -->
+  <dialog id="settings" class="sheet">
+    <div class="sheet-head">
+      <span></span>
+      <strong>Ayarlar</strong>
+      <button type="button" class="link strong" data-close>Bitti</button>
+    </div>
+
+    <h3>Bildirimler</h3>
+    <p class="muted" id="push-status">…</p>
+    <div class="row-btns">
+      <button class="btn primary" id="push-enable">Bildirimleri aç</button>
+      <button class="btn" id="push-test">Deneme bildirimi</button>
+    </div>
+
+    <h3>Siri ile sesli ekleme</h3>
+    <p class="muted">Kilit ekranında “Hey Siri, iş ekle” demek için bir kez Kestirmeler uygulamasında kestirme oluştur.</p>
+    <ol class="steps">
+      <li><b>Kestirmeler</b> uygulamasını aç, sağ üstteki <b>+</b>’ya dokun. Adını <b>İş ekle</b> yap.</li>
+      <li><b>Metni Dikte Et</b> eylemini ekle. Dil: <b>Türkçe</b>.</li>
+      <li><b>URL İçeriğini Al</b> eylemini ekle. URL olarak aşağıdaki adresi yapıştır.</li>
+      <li>Bu eylemdeki oka dokun: <b>Yöntem: POST</b>, <b>İstek Gövdesi: JSON</b>. Yeni alan ekle: anahtar <b>text</b>, değer olarak <b>Dikte Edilen Metin</b> değişkenini seç.</li>
+      <li><b>Sonucu Göster</b> eylemini ekle (Siri cevabı sesli okur).</li>
+      <li>Kullanım: “Hey Siri, iş ekle” → “Yarın 10’da bankayı ara, önemli”.</li>
+    </ol>
+    <div class="copy-box"><code id="siri-url">…</code><button class="btn small" id="copy-siri">Kopyala</button></div>
+    <p class="muted small">Bu adres şifre yerine geçer, kimseyle paylaşma. <button class="link" id="reset-siri">Adresi yenile</button></p>
+
+    <h3>Hesap</h3>
+    <div class="row-btns"><button class="btn" id="logout">Çıkış yap</button></div>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
