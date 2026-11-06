@@ -217,3 +217,18 @@ dialog::backdrop { background: rgba(0, 0, 0, .35); }
 }
 .toast button { border: 0; background: none; color: var(--accent); font-weight: 700; padding: 0; }
 @media (prefers-color-scheme: dark) { .toast button { color: #2f5bd3; } }
+
+/* ---------- hızlı işlem ---------- */
+.act-title { font-size: 22px; font-weight: 700; margin: 6px 0 2px; overflow-wrap: anywhere; }
+.act-when { margin-bottom: 14px; }
+.act-done { width: 100%; padding: 14px; font-size: 17px; }
+.act-label { margin: 18px 0 6px; font-weight: 600; }
+.act-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.act-grid .btn { padding: 12px 0; }
+.act-edit { display: block; margin: 16px auto 0; }
+.snooze-btn { font-size: 13px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); color: var(--late); font-weight: 600; align-self: center; flex: none; }
+.inline-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.inline-row input[type=time] { border: 1px solid var(--line); background: var(--card); border-radius: 11px; padding: 9px 10px; font-size: 16px; }
+.switch { display: flex; gap: 8px; align-items: center; font-size: 15px; flex: 1; min-width: 200px; }
+.switch input { width: 20px; height: 20px; accent-color: var(--accent); }
+.link:focus:not(:focus-visible), .btn:focus:not(:focus-visible) { outline: none; }

@@ -18,6 +18,7 @@ const json = (data, status = 200) =>
 const err = (msg, status = 400) => json({ error: msg }, status);
 const rid = (n = 16) => b64u(crypto.getRandomValues(new Uint8Array(n)));
 const REPEAT_OK = ['', 'daily', 'weekdays', 'weekly', 'monthly'];
+const DAY = 24 * 3600000;
 
 async function hashPassword(password, saltB64) {
   const salt = saltB64 ? Uint8Array.from(atob(saltB64), (c) => c.charCodeAt(0)) : crypto.getRandomValues(new Uint8Array(16));
@@ -62,6 +63,9 @@ export class Store extends DurableObject {
       CREATE TABLE IF NOT EXISTS tokens (token TEXT PRIMARY KEY, kind TEXT NOT NULL, created_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL);
     `);
+    for (const ddl of ['ALTER TABLE tasks ADD COLUMN nag_count INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE tasks ADD COLUMN last_notified_at INTEGER']) {
+      try { this.sql.exec(ddl); } catch { /* sütun zaten var */ }
+    }
   }
 
   // ---------- yardımcılar ----------
@@ -77,24 +81,93 @@ export class Store extends DurableObject {
     return v;
   }
 
+  prefs() {
+    return { nag: 30, nagMax: 3, summary: true, summaryTime: '08:30', ...(this.kvGet('prefs') || {}) };
+  }
+
+  // Yerel gün anahtarı ve "bugün HH:MM" zamanı (ms)
+  localDayStart(ms) {
+    const off = this.tz() * 60000;
+    return Math.floor((ms + off) / DAY) * DAY - off;
+  }
+  summaryAt(dayStart) {
+    const [h, m] = this.prefs().summaryTime.split(':').map(Number);
+    return dayStart + (h * 60 + m) * 60000;
+  }
+  nextSummary(now) {
+    if (!this.prefs().summary) return null;
+    const today = this.localDayStart(now);
+    const last = this.kvGet('lastSummary') || 0;
+    const t = this.summaryAt(today);
+    return last >= today || t + 3 * 3600000 < now ? this.summaryAt(today + DAY) : t;
+  }
+  badgeCount(now = Date.now()) {
+    const end = this.localDayStart(now) + DAY;
+    return this.sql.exec('SELECT COUNT(*) AS n FROM tasks WHERE done_at IS NULL AND remind_at IS NOT NULL AND remind_at < ?', end).toArray()[0].n;
+  }
+
   async scheduleAlarm() {
-    const r = this.sql.exec('SELECT MIN(remind_at) AS m FROM tasks WHERE done_at IS NULL AND notified = 0 AND remind_at IS NOT NULL').toArray()[0];
-    if (r && r.m != null) await this.ctx.storage.setAlarm(Math.max(r.m, Date.now() + 500));
+    const now = Date.now();
+    const p = this.prefs();
+    const times = [];
+    const a = this.sql.exec('SELECT MIN(remind_at) AS m FROM tasks WHERE done_at IS NULL AND notified = 0 AND remind_at IS NOT NULL').toArray()[0];
+    if (a && a.m != null) times.push(a.m);
+    if (p.nag > 0) {
+      const b = this.sql.exec('SELECT MIN(last_notified_at) AS m FROM tasks WHERE done_at IS NULL AND notified = 1 AND last_notified_at IS NOT NULL AND nag_count < ?', p.nagMax).toArray()[0];
+      if (b && b.m != null) times.push(b.m + p.nag * 60000);
+    }
+    const sm = this.nextSummary(now);
+    if (sm != null) times.push(sm);
+    if (times.length) await this.ctx.storage.setAlarm(Math.max(Math.min(...times), now + 500));
     else await this.ctx.storage.deleteAlarm();
   }
 
   async alarm() {
     const now = Date.now();
+    const p = this.prefs();
+    const tz = this.tz();
+    const bang = (t) => ['', '', '❗ ', '‼️ '][t.priority] || '';
+
+    // 1) Zamanı gelen hatırlatmalar
     const due = this.sql.exec('SELECT * FROM tasks WHERE done_at IS NULL AND notified = 0 AND remind_at IS NOT NULL AND remind_at <= ? ORDER BY priority DESC, remind_at', now + 5000).toArray();
     for (const t of due) {
-      const bang = ['', '', '❗ ', '‼️ '][t.priority] || '';
+      this.sql.exec('UPDATE tasks SET notified = 1, nag_count = 0, last_notified_at = ? WHERE id = ?', now, t.id);
       await this.notifyAll({
-        title: bang + t.title,
-        body: [t.priority ? `${PRIORITY_NAMES[t.priority]} öncelik` : '', t.notes].filter(Boolean).join(' · ') || 'Hatırlatma zamanı geldi',
-        tag: t.id,
-        url: `/?task=${t.id}`,
+        title: bang(t) + t.title,
+        body: [t.priority ? `${PRIORITY_NAMES[t.priority]} öncelik` : '', t.notes].filter(Boolean).join(' · ') || 'Hatırlatma zamanı geldi. Dokun: tamamla ya da ertele.',
+        tag: t.id, url: `/?task=${t.id}`, badge: this.badgeCount(now),
       });
-      this.sql.exec('UPDATE tasks SET notified = 1 WHERE id = ?', t.id);
+    }
+
+    // 2) Bitirilmeyen işler için tekrar hatırlatma
+    if (p.nag > 0) {
+      const nags = this.sql.exec('SELECT * FROM tasks WHERE done_at IS NULL AND notified = 1 AND last_notified_at IS NOT NULL AND nag_count < ? AND last_notified_at + ? <= ? ORDER BY priority DESC',
+        p.nagMax, p.nag * 60000, now + 5000).toArray();
+      for (const t of nags) {
+        this.sql.exec('UPDATE tasks SET nag_count = nag_count + 1, last_notified_at = ? WHERE id = ?', now, t.id);
+        await this.notifyAll({
+          title: `🔁 ${bang(t)}${t.title}`,
+          body: `Hâlâ bekliyor (${formatWhen(t.remind_at, now, tz)}). Dokun: tamamla ya da ertele.`,
+          tag: t.id, url: `/?task=${t.id}`, badge: this.badgeCount(now),
+        });
+      }
+    }
+
+    // 3) Sabah özeti
+    const today = this.localDayStart(now);
+    if (p.summary && (this.kvGet('lastSummary') || 0) < today && now >= this.summaryAt(today) - 5000 && now < this.summaryAt(today) + 3 * 3600000) {
+      this.kvSet('lastSummary', now);
+      const end = today + DAY;
+      const list = this.sql.exec('SELECT * FROM tasks WHERE done_at IS NULL AND remind_at IS NOT NULL AND remind_at < ? ORDER BY priority DESC, remind_at', end).toArray();
+      const late = list.filter((t) => t.remind_at < today).length;
+      if (list.length) {
+        const top = list.slice(0, 3).map((t) => `• ${bang(t)}${t.title} (${formatWhen(t.remind_at, now, tz).replace(/^Bugün /, '')})`).join('\n');
+        await this.notifyAll({
+          title: `☀️ Bugün ${list.length} işin var${late ? `, ${late} tanesi gecikmiş` : ''}`,
+          body: top + (list.length > 3 ? `\n+${list.length - 3} iş daha` : ''),
+          tag: 'summary', url: '/', badge: list.length,
+        });
+      }
     }
     await this.scheduleAlarm();
   }
@@ -196,9 +269,19 @@ export class Store extends DurableObject {
       return json({ ok: true });
     }
 
+    if (path === '/settings' && method === 'GET') return json({ ...this.prefs(), badge: this.badgeCount(), nextAlarm: await this.ctx.storage.getAlarm() });
+
     if (path === '/settings' && method === 'POST') {
       if (Number.isFinite(body.tz) && Math.abs(body.tz) <= 14 * 60) this.kvSet('tz', Math.round(body.tz));
-      return json({ ok: true });
+      const p = this.prefs();
+      let changed = false;
+      if ([0, 10, 15, 30, 60, 120].includes(body.nag)) { p.nag = body.nag; changed = true; }
+      if ([1, 3, 6, 99].includes(body.nagMax)) { p.nagMax = body.nagMax; changed = true; }
+      if (typeof body.summary === 'boolean') { p.summary = body.summary; changed = true; }
+      if (typeof body.summaryTime === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(body.summaryTime)) { p.summaryTime = body.summaryTime; changed = true; }
+      if (changed) this.kvSet('prefs', p);
+      await this.scheduleAlarm();
+      return json({ ...p, badge: this.badgeCount() });
     }
 
     // --- görevler ---
@@ -232,7 +315,7 @@ export class Store extends DurableObject {
         if ('repeat' in body) t.repeat = REPEAT_OK.includes(body.repeat) ? body.repeat : '';
         if ('remindAt' in body) {
           const v = Number.isFinite(body.remindAt) ? Math.round(body.remindAt) : null;
-          if (v !== t.remind_at) { t.remind_at = v; t.notified = v != null && v > now - 60000 ? 0 : 1; }
+          if (v !== t.remind_at) { t.remind_at = v; t.notified = v != null && v > now - 60000 ? 0 : 1; t.nag_count = 0; t.last_notified_at = null; }
         }
         let log = false;
         if (body.done === true && t.done_at == null) {
@@ -241,7 +324,7 @@ export class Store extends DurableObject {
             this.sql.exec('INSERT INTO completions (task_id, title, priority, remind_at, created_at, done_at) VALUES (?,?,?,?,?,?)', t.id, t.title, t.priority, t.remind_at, t.created_at, now);
             log = false;
             t.remind_at = nextOccurrence(t.remind_at, t.repeat, this.tz(), now);
-            t.notified = 0;
+            t.notified = 0; t.nag_count = 0; t.last_notified_at = null;
           } else t.done_at = now;
         } else if (body.done === false && t.done_at != null) {
           t.done_at = null;
@@ -249,8 +332,8 @@ export class Store extends DurableObject {
           if (t.remind_at != null && t.remind_at > now) t.notified = 0;
         }
         if (log) this.sql.exec('INSERT INTO completions (task_id, title, priority, remind_at, created_at, done_at) VALUES (?,?,?,?,?,?)', t.id, t.title, t.priority, t.remind_at, t.created_at, now);
-        this.sql.exec('UPDATE tasks SET title=?, notes=?, priority=?, remind_at=?, repeat=?, notified=?, done_at=? WHERE id=?',
-          t.title, t.notes, t.priority, t.remind_at, t.repeat, t.notified, t.done_at, t.id);
+        this.sql.exec('UPDATE tasks SET title=?, notes=?, priority=?, remind_at=?, repeat=?, notified=?, done_at=?, nag_count=?, last_notified_at=? WHERE id=?',
+          t.title, t.notes, t.priority, t.remind_at, t.repeat, t.notified, t.done_at, t.nag_count, t.last_notified_at, t.id);
         await this.scheduleAlarm();
         return json(t);
       }

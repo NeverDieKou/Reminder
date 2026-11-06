@@ -5,6 +5,9 @@ self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 self.addEventListener('push', (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch { data = { title: event.data ? event.data.text() : 'Hatırlatma' }; }
+  if (typeof data.badge === 'number' && self.navigator.setAppBadge) {
+    (data.badge ? self.navigator.setAppBadge(data.badge) : self.navigator.clearAppBadge()).catch(() => {});
+  }
   event.waitUntil(self.registration.showNotification(data.title || 'Hatırlatma', {
     body: data.body || '',
     tag: data.tag,

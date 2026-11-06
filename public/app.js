@@ -60,7 +60,11 @@ async function start() {
   updateBanner();
   syncPush();
   const focus = new URLSearchParams(location.search).get('task');
-  if (focus) { history.replaceState(null, '', '/'); flashTask(focus); }
+  if (focus) {
+    history.replaceState(null, '', '/');
+    const t = findTask(focus);
+    if (t && t.done_at == null) openAct(t); else flashTask(focus);
+  }
 }
 
 async function load() {
@@ -69,6 +73,7 @@ async function load() {
     state.active = d.active;
     state.archive = d.archive;
     render();
+    updateBadge();
   } catch (e) { if (token) toast(e.message); }
 }
 
@@ -124,6 +129,7 @@ function itemHtml(t, archived = false) {
       ${meta.length ? `<div class="meta">${meta.join('')}</div>` : ''}
       ${t.notes && !archived ? `<div class="notes">${esc(t.notes)}</div>` : ''}
     </div>
+    ${!archived && t.remind_at != null && t.remind_at < Date.now() ? `<button class="snooze-btn" data-act="act">Ertele</button>` : ''}
     ${archived ? `<div class="item-actions"><button class="icon-btn" data-act="delete" aria-label="Sil"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button></div>` : ''}
   </div>`;
 }
@@ -177,6 +183,7 @@ document.addEventListener('click', async (e) => {
   if (!t) return;
   const act = actEl.dataset.act;
   if (act === 'edit') openEdit(t);
+  if (act === 'act') openAct(t);
   if (act === 'done') completeTask(t, actEl);
   if (act === 'restore') {
     await api(`/tasks/${t.id}`, { method: 'PATCH', body: { done: false } });
@@ -401,6 +408,7 @@ function updateBanner(force) {
 // ---------------- ayarlar ----------------
 $('#open-settings').addEventListener('click', async () => {
   updatePushStatus();
+  loadPrefs();
   $('#settings').showModal();
   try {
     const { key } = await api('/siri-key');
@@ -429,6 +437,60 @@ $('#logout').addEventListener('click', async () => {
   $('#settings').close();
   showAuth();
 });
+
+// ---------------- hızlı işlem ----------------
+let actTask = null;
+function openAct(t) {
+  actTask = t;
+  $('#act-title').textContent = t.title;
+  $('#act-when').textContent = t.remind_at != null ? `${t.remind_at < Date.now() ? 'Gecikti · ' : ''}${formatWhen(t.remind_at, Date.now(), tz())}` : '';
+  $('#act').showModal();
+}
+$('#act-done').addEventListener('click', () => { $('#act').close(); completeTask(actTask); });
+$('#act-edit').addEventListener('click', () => { $('#act').close(); openEdit(actTask); });
+$$('[data-snooze]').forEach((b) => b.addEventListener('click', async () => {
+  const v = b.dataset.snooze;
+  const now = new Date();
+  let at;
+  if (v === 'eve') { at = new Date(now); at.setHours(19, 0, 0, 0); if (at <= now) at.setDate(at.getDate() + 1); }
+  else if (v === 'tom') { at = new Date(now); at.setDate(at.getDate() + 1); at.setHours(9, 0, 0, 0); }
+  else at = new Date(Date.now() + Number(v) * 60000);
+  $('#act').close();
+  try {
+    await api(`/tasks/${actTask.id}`, { method: 'PATCH', body: { remindAt: at.getTime() } });
+    toast(`Ertelendi: ${formatWhen(at.getTime(), Date.now(), tz())}`);
+    load();
+  } catch (e) { toast(e.message); }
+}));
+
+// ---------------- simge rozeti ----------------
+function updateBadge() {
+  if (!navigator.setAppBadge) return;
+  const end = new Date(); end.setHours(24, 0, 0, 0);
+  const n = state.active.filter((t) => t.remind_at != null && t.remind_at < end.getTime()).length;
+  (n ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {});
+}
+
+// ---------------- hatırlatma ayarları ----------------
+async function loadPrefs() {
+  try {
+    const p = await api('/settings');
+    $('#pref-nag').value = String(p.nag);
+    $('#pref-nagmax').value = String(p.nagMax);
+    $('#pref-summary').checked = !!p.summary;
+    $('#pref-summary-time').value = p.summaryTime;
+    $('#pref-nagmax').disabled = p.nag === 0;
+  } catch {}
+}
+async function savePrefs() {
+  const body = {
+    nag: Number($('#pref-nag').value), nagMax: Number($('#pref-nagmax').value),
+    summary: $('#pref-summary').checked, summaryTime: $('#pref-summary-time').value || '08:30',
+  };
+  $('#pref-nagmax').disabled = body.nag === 0;
+  try { await api('/settings', { method: 'POST', body }); toast('Kaydedildi'); } catch (e) { toast(e.message); }
+}
+['#pref-nag', '#pref-nagmax', '#pref-summary', '#pref-summary-time'].forEach((s) => $(s).addEventListener('change', savePrefs));
 
 // ---------------- analiz ----------------
 let exportCache = null;
